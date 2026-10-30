@@ -2,8 +2,10 @@
 
 namespace Laravel\Horizon\Http\Controllers;
 
+use Illuminate\Contracts\Queue\Factory as QueueFactory;
 use Illuminate\Http\Request;
 use Laravel\Horizon\Contracts\JobRepository;
+use Laravel\Horizon\Contracts\SupervisorRepository;
 
 class PendingJobsController extends Controller
 {
@@ -15,16 +17,34 @@ class PendingJobsController extends Controller
     public $jobs;
 
     /**
+     * The queue factory implementation.
+     *
+     * @var \Illuminate\Contracts\Queue\Factory
+     */
+    public $queue;
+
+    /**
+     * The supervisor repository implementation.
+     *
+     * @var \Laravel\Horizon\Contracts\SupervisorRepository
+     */
+    public $supervisors;
+
+    /**
      * Create a new controller instance.
      *
      * @param  \Laravel\Horizon\Contracts\JobRepository  $jobs
+     * @param  \Illuminate\Contracts\Queue\Factory  $queue
+     * @param  \Laravel\Horizon\Contracts\SupervisorRepository  $supervisors
      * @return void
      */
-    public function __construct(JobRepository $jobs)
+    public function __construct(JobRepository $jobs, QueueFactory $queue, SupervisorRepository $supervisors)
     {
         parent::__construct();
 
         $this->jobs = $jobs;
+        $this->queue = $queue;
+        $this->supervisors = $supervisors;
     }
 
     /**
@@ -47,7 +67,32 @@ class PendingJobsController extends Controller
         return [
             'jobs' => $jobs,
             'total' => $this->jobs->countPending(),
+            'ready' => $this->countQueued('readyNow'),
+            'delayed' => $this->countQueued('delayedNow'),
         ];
+    }
+
+    /**
+     * Sum the given queue size method over every queue that is being worked by the supervisors.
+     *
+     * @param  string  $method
+     * @return int
+     */
+    protected function countQueued($method)
+    {
+        return collect($this->supervisors->all())
+            ->flatMap(fn ($supervisor) => array_keys($supervisor->processes))
+            ->flatMap(function ($queue) {
+                [$connection, $queueNames] = explode(':', $queue, 2);
+
+                return collect(explode(',', $queueNames))->map(fn ($queueName) => $connection.':'.$queueName);
+            })
+            ->unique()
+            ->sum(function ($queue) use ($method) {
+                [$connection, $queueName] = explode(':', $queue, 2);
+
+                return $this->queue->connection($connection)->{$method}($queueName);
+            });
     }
 
     /**

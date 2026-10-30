@@ -13,6 +13,8 @@
                 page: 1,
                 perPage: 50,
                 totalPages: 1,
+                readyCount: 0,
+                delayedCount: 0,
                 jobs: []
             };
         },
@@ -67,6 +69,9 @@
 
                 this.$http.get(Horizon.basePath + '/api/jobs/' + this.$route.params.type + '?starting_at=' + starting + '&limit=' + this.perPage)
                     .then(response => {
+                        this.readyCount = response.data.ready ?? 0;
+                        this.delayedCount = response.data.delayed ?? 0;
+
                         if (!this.$root.autoLoadsNewEntries && refreshing && this.jobs.length && response.data.jobs[0]?.id !== this.jobs[0]?.id) {
                             this.hasNewEntries = true;
                         } else {
@@ -154,6 +159,10 @@
                 <h2 class="h6 m-0" v-if="$route.params.type == 'pending'">Pending Jobs</h2>
                 <h2 class="h6 m-0" v-if="$route.params.type == 'completed'">Completed Jobs</h2>
                 <h2 class="h6 m-0" v-if="$route.params.type == 'silenced'">Silenced Jobs</h2>
+
+                <small class="text-muted" v-if="ready && $route.params.type == 'pending'">
+                    {{ readyCount.toLocaleString() }} pending<span v-if="delayedCount"> · {{ delayedCount.toLocaleString() }} delayed</span>
+                </small>
             </div>
 
             <div v-if="!ready"

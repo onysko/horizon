@@ -30,11 +30,31 @@ class RedisQueue extends BaseQueue
      */
     public function readyNow($queue = null)
     {
-        $key = method_exists(parent::class, 'getQueueRedisKey')
+        return $this->getConnection()->llen($this->queueRedisKey($queue));
+    }
+
+    /**
+     * Get the number of queue jobs that are delayed and not yet ready to process.
+     *
+     * @param  string|null  $queue
+     * @return int
+     */
+    public function delayedNow($queue = null)
+    {
+        return $this->getConnection()->zcard($this->queueRedisKey($queue).':delayed');
+    }
+
+    /**
+     * Get the Redis key for the given queue, cluster-safe when the framework supports it.
+     *
+     * @param  string|null  $queue
+     * @return string
+     */
+    protected function queueRedisKey($queue = null)
+    {
+        return method_exists(parent::class, 'getQueueRedisKey')
             ? $this->getQueueRedisKey($queue)
             : $this->getQueue($queue);
-
-        return $this->getConnection()->llen($key);
     }
 
     /**
